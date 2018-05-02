@@ -2,28 +2,33 @@
 
 (*Converts a polyhedral graph into the 3D solid it represents.  Very convenient :)
 	Parameters:
-	faces - vertices which comprise each face {{1,2,3,4},...} -- assumption is that each vertex is adjacent to the next.  Winding order (clockwise vs counterclockwise) is irrelevant.
+	faces - vertices which comprise each face {{1,2,3,4},...} -- assumption is that each vertex is adjacent to the next.  Winding order (clockwise vs counterclockwise) is irrelevant for
+			every face EXCEPT THE FIRST.  The first face is assumed to wind clockwise.
 	edgeLength - length of each edge
 	filePath - can be absolute or relative, must be a string formatted so Mathematica can read it. If relative, Mathematica will assume root is Documents directory (for Windows anyway)
 	verbose - number of frames per fold animation.  0 indicates no animation should be created
-	
+	alignFreq - how often to align first face with xy plane 
+				0: never
+				-1: at end of folding
+				x >= 1: every x folds 
+
 	Output:
 	{Graphics3D object (representation of polyhedral graph), coordinates of every face (rounded to 2 decimal places) }
 *)
-polyhedralGraphToShape[faces_, edgeLength_, filePath_, verbose_]:=
+polyhedralGraphToShape[faces_, edgeLength_, filePath_, verbose_, alignFreq_]:=
 	Module[{netInfo, ordered, adjacentFaces, duplicates, tempFaces, duplicateVertices},
 		(*unfold the polyhedral graph*)
 		netInfo = unfold[faces];
 		(*order the faces and duplicate edges*)
 		ordered = orderNetInfo[netInfo[[1]], netInfo[[3]]];
 
-		duplicateVertices = netInfo[[4]];
+		(*duplicateVertices = netInfo[[4]];*)
 		tempFaces = ordered[[1]];
 		adjacentFaces = netInfo[[2]];
 		duplicates = ordered[[2]];
 		
 		(*Hand the work off*)
-		Return[netToShapeHelper[tempFaces, adjacentFaces, duplicates, duplicateVertices, edgeLength, filePath, verbose]];
+		Return[netToShape[tempFaces, adjacentFaces, duplicates, edgeLength, filePath, verbose, alignFreq]];
 	];
 
 
@@ -35,26 +40,15 @@ polyhedralGraphToShape[faces_, edgeLength_, filePath_, verbose_]:=
 	edgeLength - length of each edge
 	filePath - can be absolute or relative, must be a string formatted so Mathematica can read it. If relative, Mathematica will assume root is Documents directory (for Windows anyway)
 	verbose - number of frames per fold animation.  0 indicates no animation should be created
+	alignFreq - how often to align first face with xy plane 
+				0: never
+				-1: at end of folding
+				x >= 1: every x folds 
 	
 	Output:
 	{Graphics3D object (representation of folded net), coordinates of every face (rounded to 2 decimal places) }
 *)
-netToShape[faces_, adjacentFaces_, duplicates_, edgeLength_, filePath_, verbose_]:=
-	Module[{},
-		Return[netToShapeHelper[faces, adjacentFaces, duplicates, getDuplicateVertexList[faces, duplicates], edgeLength, filePath, verbose]];		
-	];
-
-
-(*Helper function for netToShape.
-	Parameters:
-	duplicateVertices - list of which vertices are duplicates { {1,2}, {2,3}, {1,4}, ...}
-	
-	see netToShape for others
-	
-	Output:
-	{Graphics3D object (representation of folded net), coordinates of every face (rounded to 2 decimal places) }
-*)
-netToShapeHelper[faces_, adjacentFaces_, duplicates_, duplicateVertices_, edgeLength_, filePath_, verbose_]:=
+netToShape[faces_, adjacentFaces_, duplicates_, edgeLength_, filePath_, verbose_, alignFreq_]:=
 	Module[{result, tempFaces, tempAdjacentFaces, tempDuplicates, output},
 		(*format the net*)
 		result = formatNet[faces, adjacentFaces, duplicates];
@@ -65,7 +59,7 @@ netToShapeHelper[faces_, adjacentFaces_, duplicates_, duplicateVertices_, edgeLe
 			tempAdjacentFaces = result[[2]];
 			tempDuplicates = result[[3]];
 
-			output = findCoordinates[tempFaces, tempAdjacentFaces, tempDuplicates, duplicateVertices, Max[tempFaces, 2], edgeLength, filePath, verbose]; 			
+			output = findCoordinates[tempFaces, tempAdjacentFaces, tempDuplicates, getDuplicateVertexList[tempDuplicates], Max[tempFaces, 2], edgeLength, filePath, verbose, alignFreq]; 			
 		];
 		
 		(*pass the work off*)
@@ -81,8 +75,9 @@ netToShapeHelper[faces_, adjacentFaces_, duplicates_, duplicateVertices_, edgeLe
 	Output:
 	list of which vertices are duplicates { {1,2}, {2,3}, {1,4}, ...}
 *)
-getDuplicateVertexList[faces_, duplicateEdges_]:=
+getDuplicateVertexList[duplicateEdges_]:=
 	Module[{duplicateVertices, dup1, dup2, proceed1, proceed2, i, j},
+		(*Print[duplicateEdges];*)
 		
 		duplicateVertices = {};
 		(*Print[Length[duplicateEdges]];*)
@@ -91,27 +86,36 @@ getDuplicateVertexList[faces_, duplicateEdges_]:=
 			dup1 = DeleteDuplicates[{duplicateEdges[[j]][[1]][[1]], duplicateEdges[[j]][[2]][[2]] }];
 			dup2 = DeleteDuplicates[{duplicateEdges[[j]][[1]][[2]], duplicateEdges[[j]][[2]][[1]] }];			
 			
-			(*Print[dup1];
-			Print[dup2];*)
+(*			Print[dup1];
+			Print[dup2];
+			Print[Length[dup1]];
+			Print[Length[dup2]];
+*)
 			
 			proceed1 = True;
 			proceed2 = True;
+			If[Length[dup1] < 2, (proceed1 = False)];
+			If[Length[dup2] < 2, (proceed2 = False)];
 			Do[
 				(
 				
-				If[Length[Intersection[duplicateVertices[[i]], dup1] ] == 2 || Length[dup1] < 2, (proceed1 = False) ];
-				If[Length[Intersection[duplicateVertices[[i]], dup2] ] == 2 || Length[dup2] < 2, (proceed2 = False) ];
+				If[Length[Intersection[duplicateVertices[[i]], dup1] ] == 2, (proceed1 = False) ];
+				If[Length[Intersection[duplicateVertices[[i]], dup2] ] == 2, (proceed2 = False) ];
 				
 				),
 				{i, 1, Length[duplicateVertices]}
 			];
 			
+(*			Print[proceed1];
+			Print[proceed2];*)
 			If[proceed1, (AppendTo[duplicateVertices, dup1])];
 			If[proceed2, (AppendTo[duplicateVertices, dup2])];
+			(*Print[duplicateVertices];*)
 			),
 			{j, 1, Length[duplicateEdges]}
 		];
 		
+		(*Print[duplicateVertices];*)
 		Return[duplicateVertices];		
 	];
 
@@ -1132,7 +1136,7 @@ unfold[faces_]:=
 	(*	Print[result[[6]]];
 		Print[tempDuplicates];*)
 		
-		output = {newFaces, result[[4]], tempDuplicates, tempDuplicateVertices};		
+		output = {newFaces, result[[4]], tempDuplicates};(*, tempDuplicateVertices};*)		
 		Return[output];
 	];
 	
@@ -1622,12 +1626,15 @@ getVertexNeighborsInFace[face_, vertex_] :=
 	verbose - number of frames per fold animation.  0 indicates no animation should be created
 			
 	filePath - can be absolute or relative, must be a string formatted so Mathematica can read it. If relative, Mathematica will assume root is Documents directory (for Windows anyway)
-	
+	alignFreq - how often to align first face with xy plane 
+				0: never
+				-1: at end of folding
+				x >= 1: every x folds 
 	Output:
 	{Graphics3D object (representation of folded net), coordinates of every face (rounded to 2 decimal places) }
 *)
-findCoordinates[faces_, adjacentFaces_, duplicates_, duplicateVertices_, numVertices_, edgeLength_, filePath_, verbose_] :=
-	Module[ {done, coordinates, d, temp, i,j, axes, usedAxes, joinedPoints, graphicsFaces, graphicsFaces2, edgesFixed, stl, foldNumber, frames, result, bounds, faceCoordinates},
+findCoordinates[faces_, adjacentFaces_, duplicates_, duplicateVertices_, numVertices_, edgeLength_, filePath_, verbose_, alignFreq_] :=
+	Module[ {done, coordinates, d, temp, i,j, axes, usedAxes, joinedPoints, graphicsFaces, graphicsFaces2, edgesFixed, stl, foldNumber, frames, result, bounds, faceCoordinates, num},
 		(*Print["hi"];*)
 		done = {};
 		usedAxes = {};
@@ -1649,13 +1656,14 @@ findCoordinates[faces_, adjacentFaces_, duplicates_, duplicateVertices_, numVert
 
 		(*Show first step of the folding process*)
 		(*If[verbose == 1, AppendTo[frames, displayShape[coordinates, faces]], Null];*)
-		(*Print[displayShape[coordinates, faces]];*)
+		(*Print[displayShape[coordinates, faces, {}]];*)
 		
 		edgesFixed = 0;
+		num = 0;
+		foldNumber = 1;
 		While[Length[done] < Length[duplicates],
-			
+			num = Length[done];
 		
-			foldNumber = 1;
 			Do[
 				(d = duplicates[[i]];
 				(*If the duplicates haven't already been taken care of, then try do it now*)
@@ -1676,7 +1684,7 @@ findCoordinates[faces_, adjacentFaces_, duplicates_, duplicateVertices_, numVert
 						
 						(*Print[duplicateVertices];
 						Print[d];
-						Print[displayShape[coordinates, faces]];*)
+						Print[displayShape[coordinates, faces, {}]];*)
 
 						(*Show each step of the folding process*)
 						If[temp[[4]] == 1, (*The flag at the end indicates when something significant happens to the shape of the net*)
@@ -1694,6 +1702,27 @@ findCoordinates[faces_, adjacentFaces_, duplicates_, duplicateVertices_, numVert
 								];
 								)
 							];
+							
+							(*align face 1 with xy plane every 5 folds*)
+							If[alignFreq > 0,
+								(
+								If[Divisible[foldNumber, alignFreq],
+									(
+									result = alignShape[faces, adjacentFaces, coordinates, verbose];
+									coordinates = result[[1]];
+									Do[
+										(
+										AppendTo[frames, result[[2]][[j]] ];
+										),
+										{j, 1, Length[result[[2]] ]}
+									];
+									
+									)								
+								];
+								)
+							];
+							
+							
 							edgesFixed = 0;
 							),
 							edgesFixed = 1;
@@ -1708,11 +1737,34 @@ findCoordinates[faces_, adjacentFaces_, duplicates_, duplicateVertices_, numVert
 				),
 				 {i, Length[duplicates]}
 			];
+			
+			If[Length[done] == num,
+				(
+				Print["Error occured during folding: can't find valid edge to join at current stage"];
+				Break[];
+				)
+			];
+			
 		];
 		(*Display one more time if edges were fixed since last display*)
 		If[edgesFixed == 1,
 			If[verbose >= 1, AppendTo[frames, displayShape[coordinates, faces, {}] ]];
 			,Null];		
+
+		If[alignFreq != 0,
+			(
+			(*align shape with xy plane one last time*)
+			result = alignShape[faces, adjacentFaces, coordinates, verbose];
+			coordinates = result[[1]];
+			Do[
+				(
+				AppendTo[frames, result[[2]][[j]] ];
+				),
+				{j, 1, Length[result[[2]] ]}
+			];
+			)
+		];
+		
 
 		stl = displayShape[coordinates, faces, {}];
 		(*create list of coordinates for each face*)
@@ -1740,11 +1792,14 @@ findCoordinates[faces_, adjacentFaces_, duplicates_, duplicateVertices_, numVert
 	
 	
 displayShape[coordinates_, faces_, bounds_]:=
-Module[{graphicsFaces, graphicsFaces2, i, j, range},
+Module[{graphicsFaces, graphicsFaces2, i, j, range, colors, graphic},
 	graphicsFaces = {};
+	colors = {};
 	Do[
 		(
 		AppendTo[graphicsFaces, {}];
+		If[i == 1, AppendTo[colors, Purple], AppendTo[colors, {}] ];
+		
 		Do[
 			(
 				AppendTo[graphicsFaces[[i]], coordinates[[faces[[i]][[j]]]] ];
@@ -1758,7 +1813,8 @@ Module[{graphicsFaces, graphicsFaces2, i, j, range},
 	graphicsFaces2 = {};
 	Do[
 		(
-		AppendTo[graphicsFaces2, Graphics3D[Polygon[graphicsFaces[[i]] ]]];
+(*		AppendTo[graphicsFaces2, Graphics3D[Polygon[graphicsFaces[[i]] ] ]];*)
+		AppendTo[graphicsFaces2, Polygon[graphicsFaces[[i]] ]];
 		),
 		{i, Length[faces]}
 	];
@@ -1770,9 +1826,13 @@ Module[{graphicsFaces, graphicsFaces2, i, j, range},
 		range = {{bounds[[1]],bounds[[2]]}, {bounds[[1]],bounds[[2]]}, {bounds[[1]],bounds[[2]]}};
 		)
 	];
+	graphic = Graphics3D[Table[ {colors[[i]], graphicsFaces2[[i]]}, {i, 1, Length[faces] }] ];  
+
 	(*Print[Show[graphicsFaces2]];*)
 	(*Return[Show[graphicsFaces2, PlotRange -> range] ]*)
-	Return[Show[graphicsFaces2] ]
+(*	Return[Show[graphicsFaces2] ]*)
+	Return[Show[graphic] ]
+
 ];
 
 
@@ -2412,9 +2472,10 @@ findPath[start_, end_, numVertices_, edges_] :=
 connect[coordinates_, faces_, adjacentFaces_, axes_, usedAxes_, joinedPoints_, duplicatePair_, duplicateVertices_, filePath_, verbose_, foldNumber_, bounds_] :=
 	Module[{data, tempCoordinates, result, t, t2, firstAxis, secondAxis, firstAnchor, secondAnchor, r1, r2, eq1, eq2, as, angle1, angle2, firstPoints, secondPoints, t3, t4, point1, point2, point3, point4
 		, tempPoint, vec1, vec2, v, p1, p2, p3, p4, d1, d2, d3, d4, length1, length2, solutions, psolutions, temp1, temp2, i, usedAxesCopy, joinedPointsCopy, firstAxisValid, secondAxisValid, zip, ineqToIntv,
-		diff, dist, change, duplicate1, duplicate2, fakeR1, fakeR2, fakeCoordinates, j, string, frames},
+		diff, dist, change, duplicate1, duplicate2, fakeR1, fakeR2, fakeCoordinates, j, string, frames, trueFalse},
 		
-	(*	Print[duplicatePair];*)
+					
+		(*	Print[duplicatePair];*)
 		
 		tempCoordinates = coordinates; (*Because input arguments can't be modified*)
 		
@@ -2513,8 +2574,10 @@ connect[coordinates_, faces_, adjacentFaces_, axes_, usedAxes_, joinedPoints_, d
 			(*---------------------------------------------------------------------------------------*)
 				
 				
-				(			
-			
+				(
+
+				
+				
 			(*Create two vectors, which we will use in our system of equations*)
 			(*The first vector will be the first duplicate edge, pointing away from the axis of rotation or a previously joined point in that edge*)
 				point1 = r1[tempCoordinates[[duplicatePair[[1]][[2]] ]]]; (*initialize first and second points in first duplicate edge*)
@@ -2575,11 +2638,12 @@ connect[coordinates_, faces_, adjacentFaces_, axes_, usedAxes_, joinedPoints_, d
 						
 		(*				If[MemberQ[duplicatePair, {6,1}],
 							(
-							Print["1.1"];
+							
 							(*Print[StringForm["angle2: ``", angle2 ]];*)
 							)
 						];*)
-	
+						(*Print["1.1"];*)
+						
 						),					
 						If[duplicatePair[[1]][[2]] == axes[[t]][[t2]][[1]] || duplicatePair[[1]][[2]] == axes[[t]][[t2]][[2]],
 							(point1 = r1[tempCoordinates[[duplicatePair[[1]][[2]] ]]]; (*first point is the point in the first duplicate edge that is also the axis endpoint*)
@@ -2592,12 +2656,12 @@ connect[coordinates_, faces_, adjacentFaces_, axes_, usedAxes_, joinedPoints_, d
 	
 					(*		If[MemberQ[duplicatePair, {6,1}],
 								(
-								Print["1.2"];
+								
 								(*Print[StringForm["angle2: ``", angle2 ]];*)
 								)
 							];*)
 	
-	
+							(*Print["1.2"];*)
 							)					
 							,Null
 						];
@@ -2638,10 +2702,11 @@ connect[coordinates_, faces_, adjacentFaces_, axes_, usedAxes_, joinedPoints_, d
 						
 					(*	If[MemberQ[duplicatePair, {6,1}],
 							(
-							Print["2.1"];
+							
 							(*Print[StringForm["angle2: ``", angle2 ]];*)
 							)
 						];*)
+					(*	Print["2.1"];*)
 						
 						),					
 						If[duplicatePair[[1]][[2]] == axes[[t3]][[t4]][[1]] || duplicatePair[[1]][[2]] == axes[[t3]][[t4]][[2]],
@@ -2655,10 +2720,11 @@ connect[coordinates_, faces_, adjacentFaces_, axes_, usedAxes_, joinedPoints_, d
 							
 					(*		If[MemberQ[duplicatePair, {6,1}],
 								(
-								Print["2.2"];
+								
 								(*Print[StringForm["angle2: ``", angle2 ]];*)
 								)
 							];*)
+						(*	Print["2.2"];*)
 							
 							)					
 							,Null
@@ -2677,275 +2743,121 @@ connect[coordinates_, faces_, adjacentFaces_, axes_, usedAxes_, joinedPoints_, d
 				(* length1 = Sqrt[vec1[[1]]^2 + vec1[[2]]^2 + vec1[[3]]^2]; *)
 				v = p2-p1;
 				length1 = Sqrt[v[[1]]^2 + v[[2]]^2 + v[[3]]^2]; (*TODO: replace with Norm[], which does the same thing*)
-				
-				(*For the third point, make sure it isn't on the axis of rotation -- this ensures that the second angle of rotation is being represented properly,
-				 and also guarantees that the third point isn't either of the previous two points*)
-				point3 = {}; (*initialize outside of the if statement for scope reasons, if Mathematica cares about that sort of thing...*)
-				(* point4 = {}; 		
-				If[duplicatePair[[2]][[1]] == duplicatePair[[1]][[1]] || duplicatePair[[2]][[1]] == duplicatePair[[1]][[2]],
-					(point3 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]]
-					(* point4 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]] *)
-					),
-					(point3 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]]
-					(* point4 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]] *)
-					)
-				];*)
-				(*
-				If[duplicatePair[[2]][[1]] == axes[[t3]][[t4]][[1]] || duplicatePair[[2]][[1]] == axes[[t3]][[t4]][[2]],
-					(					
-					point3 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]]
-					(* point4 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]] *)
-					),
+	
+		
+						(*odd edge case that pops up occasionally -- first found with square cupola*)
+				trueFalse = True;
+				If[(FreeQ[getDuplicateVertices[duplicateVertices, d2], axes[[t3]][[t4]][[1]]] && FreeQ[getDuplicateVertices[duplicateVertices, d2], axes[[t3]][[t4]][[2]]]),
+					Null,
 					(
-					If[duplicatePair[[2]][[2]] == axes[[t3]][[t4]][[1]] || duplicatePair[[2]][[2]] == axes[[t3]][[t4]][[2]],
-						(
-						point3 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]]
+(*					Print["hi"];*)
+					If[firstAxisValid == 1 && secondAxisValid == 1,
+						trueFalse = False;
+					];
+					)
+				];
+		(*		Print[trueFalse];*)
+				
+				If[trueFalse,
+					
+					(			
+					(*For the third point, make sure it isn't on the axis of rotation -- this ensures that the second angle of rotation is being represented properly,
+					 and also guarantees that the third point isn't either of the previous two points*)
+					point3 = {}; (*initialize outside of the if statement for scope reasons, if Mathematica cares about that sort of thing...*)
+					(* point4 = {}; 		
+					If[duplicatePair[[2]][[1]] == duplicatePair[[1]][[1]] || duplicatePair[[2]][[1]] == duplicatePair[[1]][[2]],
+						(point3 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]]
+						(* point4 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]] *)
+						),
+						(point3 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]]
 						(* point4 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]] *)
+						)
+					];*)
+					(*
+					If[duplicatePair[[2]][[1]] == axes[[t3]][[t4]][[1]] || duplicatePair[[2]][[1]] == axes[[t3]][[t4]][[2]],
+						(					
+						point3 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]]
+						(* point4 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]] *)
 						),
 						(
-						*)
-						(*edge 2 is not connected directly to the second axis*)
-							
-							(*find point 4 (points for the second vector are out of order for legacy reasons) *)							
-							point4 = point1; (*Trust that point1 was chosen to be colinear to the second edge OR
-											that edge 1 has no endpoints that are previously joined or on an axis*)
-							tempPoint = p1; (*TODO: clean up, tempPoint isn't being used right now*)
-							d4 = d1;
-							(*Is the first point in the first edge colinear to the second edge?  In that case, choose it to be point 4 *)
-							(*
-							If[N[Dot[v,tempCoordinates[[duplicatePair[[2]][[1]] ]] - p1 ]] == 0 && N[Dot[v,tempCoordinates[[duplicatePair[[2]][[2]] ]]  - p1]] == 0,
-								(
-								point4 = point1;
-								tempPoint = p1
-								),
-								(
-								point4 = point2;
-								tempPoint = p2
-								)
-							];
-							*)
-							
-							(*find point 3 -- choose whatever point on the second edge isn't being used as point 4
-								TODO: verify that this is gives us the vector we actually want *)
-							If[duplicatePair[[2]][[1]] != d4,
-								(
-								point3 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]];
-								d3 = duplicatePair[[2]][[1]]
-								),
-								(
-								point3 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]];
-								d3 = duplicatePair[[2]][[2]]
-								)
-							];
-
-							(*
-							If[N[Dot[v,tempCoordinates[[duplicatePair[[2]][[1]] ]] - tempPoint ]] > N[Dot[v,tempCoordinates[[duplicatePair[[2]][[2]] ]]  - tempPoint]],
-								(
-								point3 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]];
-								d3 = duplicatePair[[2]][[1]]
-								),
-								(
-								point3 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]];
-								d3 = duplicatePair[[2]][[2]]
-								)
-							];
-							*)
-(*						)
-					]
-					)
-				];
-				*)
-		
-
-
-
-(* ********************************************************************** *)
-			(*The first vector will be the first duplicate edge, pointing away from the axis of rotation or a previously joined point in that edge*)
-				point4 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]]; (*initialize first and second points in first duplicate edge*)
-				point3 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]]; 			
-				p4 = tempCoordinates[[duplicatePair[[2]][[2]] ]];
-				p3 = tempCoordinates[[duplicatePair[[2]][[1]] ]];
-				d4 = duplicatePair[[2]][[2]]; (*these two variables are for debugging purposes only*)
-				d3 = duplicatePair[[2]][[1]];
-				zip = 0; (*are the edges being "zipped" together, or are they being brought together like a lid closing?*)
-				(*Swap order if the second endpoint is a previously joined point*)
-				(*If any one of the endpoints in the first edge is previously joined, then that edge will be "zipped" together with the second edge
-					TODO: Note that this conjecture may well be wrong!  Needs further testing
-				*)
-				Do[
-					(
-					If[MemberQ[joinedPoints[[i]] , duplicatePair[[2]][[1]]],
-						(
-						point4 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]];
-						point3 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]]; 			
-						p4 = tempCoordinates[[duplicatePair[[2]][[1]] ]];
-						p3 = tempCoordinates[[duplicatePair[[2]][[2]] ]];
-						
-						d4 = duplicatePair[[2]][[1]];
-						d3 = duplicatePair[[2]][[2]];
-						
-					(*	Print["d3"];
-						Print[d3];*)
-						zip = 1; (*zip*)
-						)
-						,
-						If[MemberQ[joinedPoints[[i]] , duplicatePair[[2]][[2]]],
+						If[duplicatePair[[2]][[2]] == axes[[t3]][[t4]][[1]] || duplicatePair[[2]][[2]] == axes[[t3]][[t4]][[2]],
 							(
-							point4 = r1[tempCoordinates[[duplicatePair[[2]][[2]] ]]];
-							point3 = r1[tempCoordinates[[duplicatePair[[2]][[1]] ]]]; 			
-							p4 = tempCoordinates[[duplicatePair[[2]][[2]] ]];
-							p3 = tempCoordinates[[duplicatePair[[2]][[1]] ]];
-							
-							d4 = duplicatePair[[2]][[2]];
-							d3 = duplicatePair[[2]][[1]];
-							
-							zip = 1; (*zip*)
-							)
-						];
-						
-					];
-					),
-					{i, 1, Length[joinedPoints]}
-				];
-				
-				
-
-				
-				(*If any one of the endpoints in the first edge is on its axis of rotation, then that edge will be "zipped" together with the second edge
-					TODO: This conjecture may be wrong!
-				*)
-				If[duplicatePair[[2]][[1]] == axes[[t3]][[t4]][[1]] || duplicatePair[[2]][[1]] == axes[[t3]][[t4]][[2]],
-					(point4 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]]; (*first point is the point in the second duplicate edge that is not the axis endpoint*)
-					point3 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]]; (*second point in first duplicate edge*)			
-					p4 = tempCoordinates[[duplicatePair[[2]][[1]] ]];
-					p3 = tempCoordinates[[duplicatePair[[2]][[2]] ]];
-
-					
-					d4 = duplicatePair[[2]][[1]];
-					d3 = duplicatePair[[2]][[2]];
-					zip = 1;
-					),					
-					If[duplicatePair[[2]][[2]] == axes[[t3]][[t4]][[1]] || duplicatePair[[2]][[2]] == axes[[t3]][[t4]][[2]],
-						(point4 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]]; (*first point is the point in the second duplicate edge that is not the axis endpoint*)
-						point3 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]]; (*second point in first duplicate edge*)			
-						p4 = tempCoordinates[[duplicatePair[[2]][[2]] ]];
-						p3 = tempCoordinates[[duplicatePair[[2]][[1]] ]];
-
-						If[MemberQ[duplicatePair, {8,7}],
-							(
-							Print["2"];
-							(*Print[StringForm["point2: ``", p2 ]];*)
-							)
-						];
-
-						d4 = duplicatePair[[2]][[2]];
-						d3 = duplicatePair[[2]][[1]];
-						zip = 1;
-						)
-						,
-						(*check to make sure point 3 isn't on other axis either -- will be the duplicate vertex though, so find that first*)
-						(
-	(*					Print["joinedPoints"];
-						Print[joinedPoints];*)
-						duplicate1 = -1;
-						duplicate2 = -1;
-						Do[
-							(
-
-							If[MemberQ[joinedPoints[[i]], duplicatePair[[2]][[1]] ] ,
-								(
-								If[duplicatePair[[2]][[1]] == joinedPoints[[i]][[1]] ,
-									(duplicate1 = joinedPoints[[i]][[2]]
-									),
-									duplicate1 = joinedPoints[[i]][[1]]
-								];
-								), Null
-							];
-
-							If[MemberQ[joinedPoints[[i]], duplicatePair[[2]][[2]] ] ,
-								(
-					(*			Print["found:"];
-								Print[i];*)
-								If[duplicatePair[[2]][[2]] == joinedPoints[[i]][[1]] ,
-									(duplicate2 = joinedPoints[[i]][[2]]
-									),
-									duplicate2 = joinedPoints[[i]][[1]]
-								];
-								), Null
-							];
-								
+							point3 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]]
+							(* point4 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]] *)
 							),
-							{i, 1, Length[joinedPoints]}
-					 	];
-					(* 	Print["first"];
-					 	Print[duplicatePair[[2]][[1]]];
-					 	Print["duplicate1"];
-					 	Print[duplicate1];
-					 	Print["second"];
-					 	Print[duplicatePair[[2]][[2]]];
-					 	Print["duplicate2"];
-					 	Print[duplicate2];*)
-					 	
-						If[duplicate1 == axes[[t]][[t2]][[1]] || duplicate1 == axes[[t]][[t2]][[2]],
-							(point4 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]]; (*first point is the point in the second duplicate edge that is not the axis endpoint*)
-							point3 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]]; (*second point in first duplicate edge*)			
-							p4 = tempCoordinates[[duplicatePair[[2]][[1]] ]];
-							p3 = tempCoordinates[[duplicatePair[[2]][[2]] ]];
-		
-							
-							d4 = duplicatePair[[2]][[1]];
-							d3 = duplicatePair[[2]][[2]];
-							zip = 1;
-							),					
-							If[duplicate2 == axes[[t]][[t2]][[1]] || duplicate2 == axes[[t]][[t2]][[2]],
-								(point4 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]]; (*first point is the point in the second duplicate edge that is not the axis endpoint*)
-								point3 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]]; (*second point in first duplicate edge*)			
-								p4 = tempCoordinates[[duplicatePair[[2]][[2]] ]];
-								p3 = tempCoordinates[[duplicatePair[[2]][[1]] ]];
-		
-						
-								If[MemberQ[duplicatePair, {8,7}],
+							(
+							*)
+							(*edge 2 is not connected directly to the second axis*)
+								
+								(*find point 4 (points for the second vector are out of order for legacy reasons) *)							
+								point4 = point1; (*Trust that point1 was chosen to be colinear to the second edge OR
+												that edge 1 has no endpoints that are previously joined or on an axis*)
+								tempPoint = p1; (*TODO: clean up, tempPoint isn't being used right now*)
+								d4 = d1;
+								(*Is the first point in the first edge colinear to the second edge?  In that case, choose it to be point 4 *)
+								(*
+								If[N[Dot[v,tempCoordinates[[duplicatePair[[2]][[1]] ]] - p1 ]] == 0 && N[Dot[v,tempCoordinates[[duplicatePair[[2]][[2]] ]]  - p1]] == 0,
 									(
-									Print["3"];
-									(*Print[StringForm["point2: ``", p2 ]];*)
+									point4 = point1;
+									tempPoint = p1
+									),
+									(
+									point4 = point2;
+									tempPoint = p2
 									)
 								];
-				
-								d4 = duplicatePair[[2]][[2]];
-								d3 = duplicatePair[[2]][[1]];
-								zip = 1;
-								)					
-								,Null
-							];
-						];
+								*)
+								
+								(*find point 3 -- choose whatever point on the second edge isn't being used as point 4
+									TODO: verify that this is gives us the vector we actually want *)
+								If[duplicatePair[[2]][[1]] != d4,
+									(
+									point3 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]];
+									d3 = duplicatePair[[2]][[1]]
+									),
+									(
+									point3 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]];
+									d3 = duplicatePair[[2]][[2]]
+									)
+								];
+	
+								(*
+								If[N[Dot[v,tempCoordinates[[duplicatePair[[2]][[1]] ]] - tempPoint ]] > N[Dot[v,tempCoordinates[[duplicatePair[[2]][[2]] ]]  - tempPoint]],
+									(
+									point3 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]];
+									d3 = duplicatePair[[2]][[1]]
+									),
+									(
+									point3 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]];
+									d3 = duplicatePair[[2]][[2]]
+									)
+								];
+								*)
+	(*						)
+						]
 						)
 					];
-					(*(
-					If[duplicatePair[[1]][[2]] == axes[[t]][[t2]][[1]] || duplicatePair[[1]][[2]] == axes[[t]][[t2]][[2]],
+					*)
+			
+	
+	
+	
+	(* ********************************************************************** *)
+				(*The first vector will be the first duplicate edge, pointing away from the axis of rotation or a previously joined point in that edge*)
+					point4 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]]; (*initialize first and second points in first duplicate edge*)
+					point3 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]]; 			
+					p4 = tempCoordinates[[duplicatePair[[2]][[2]] ]];
+					p3 = tempCoordinates[[duplicatePair[[2]][[1]] ]];
+					d4 = duplicatePair[[2]][[2]]; (*these two variables are for debugging purposes only*)
+					d3 = duplicatePair[[2]][[1]];
+					zip = 0; (*are the edges being "zipped" together, or are they being brought together like a lid closing?*)
+					(*Swap order if the second endpoint is a previously joined point*)
+					(*If any one of the endpoints in the first edge is previously joined, then that edge will be "zipped" together with the second edge
+						TODO: Note that this conjecture may well be wrong!  Needs further testing
+					*)
+					Do[
 						(
-						point1 = r1[tempCoordinates[[duplicatePair[[1]][[2]] ]]];
-						point2 = r1[tempCoordinates[[duplicatePair[[1]][[1]] ]]]; 			
-						p1 = tempCoordinates[[duplicatePair[[1]][[2]] ]];
-						p2 = tempCoordinates[[duplicatePair[[1]][[1]] ]];
-						),
-						(
-						(*irrelevant tbh*)
-						point1 = r1[tempCoordinates[[duplicatePair[[1]][[1]] ]]];
-						point2 = r1[tempCoordinates[[duplicatePair[[1]][[2]] ]]]; 			
-						p1 = tempCoordinates[[duplicatePair[[1]][[1]] ]];
-						p2 = tempCoordinates[[duplicatePair[[1]][[2]] ]];
-						)
-					];
-					)*)
-				];		
-
-(* ********************************************************************** *)
-
-				(*make sure point 2 and 3 are duplicates.  This only works if d2 is not literally the same vertex as d3 (ie 3,3) *)
-				(*TODO: remove all code before this that reassigns d3*)
-					If[FreeQ[getDuplicateVertices[duplicateVertices, d3], d2],
-						(
-						If[d3 == duplicatePair[[2]][[1]],
+						If[MemberQ[joinedPoints[[i]] , duplicatePair[[2]][[1]]],
 							(
 							point4 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]];
 							point3 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]]; 			
@@ -2955,156 +2867,272 @@ connect[coordinates_, faces_, adjacentFaces_, axes_, usedAxes_, joinedPoints_, d
 							d4 = duplicatePair[[2]][[1]];
 							d3 = duplicatePair[[2]][[2]];
 							
+						(*	Print["d3"];
+							Print[d3];*)
 							zip = 1; (*zip*)
-							),
-							(
-							point4 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]];
-							point3 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]]; 			
-							p4 = tempCoordinates[[duplicatePair[[2]][[2]] ]];
-							p3 = tempCoordinates[[duplicatePair[[2]][[1]] ]];
-							
-							d4 = duplicatePair[[2]][[2]];
-							d3 = duplicatePair[[2]][[1]];
-							
-							zip = 1; (*zip*)
-							)							
-						];	
-						)
-					];
-		
-				(*This second vector is NOT necessarily the second duplicate edge -- it's a vector from a point on the first edge to a point on the second edge*)
-				vec2 = point3 - point4;
-				
-				(*get the length of the second edge (should be a number) *)
-			(*	p3 = tempCoordinates[[duplicatePair[[2]][[1]] ]];
-				p4 = tempCoordinates[[duplicatePair[[2]][[2]] ]];
-				v = p4-p3;
-				length2 = Sqrt[v[[1]]^2 + v[[2]]^2 + v[[3]]^2];*)
-				
-				
-				(*NOTE: dist is used instead of vec1 and vec2 in the new equation: vec1 and vec2 are worthless.  
-				TODO: discard vec1 and vec2*)
-				diff = point2 - point3;
-				dist = diff[[1]]^2  + diff[[2]]^2 + diff[[3]]^2;
-				
-
-				(*Print["d2"];
-				Print[d2];
-				Print["d3"];
-				Print[d3];*)
+							)
+							,
+							If[MemberQ[joinedPoints[[i]] , duplicatePair[[2]][[2]]],
+								(
+								point4 = r1[tempCoordinates[[duplicatePair[[2]][[2]] ]]];
+								point3 = r1[tempCoordinates[[duplicatePair[[2]][[1]] ]]]; 			
+								p4 = tempCoordinates[[duplicatePair[[2]][[2]] ]];
+								p3 = tempCoordinates[[duplicatePair[[2]][[1]] ]];
 								
-				(*Find the rotation angles now*)
-				angle1 = -1;
-				angle2 = -1;
-				(*Courtesy of
-				https://mathematica.stackexchange.com/questions/134963/using-the-output-of-reduce
-				Converts inequalities to intervals.  It's the only way I could find to generically handle equalities and inequalities, because
-				I couldn't figure out how to make Mathematica test an answer to see if it's an inequality or equality.  ToRules[] doesn't accept
-				inequalities.
-				*)
-				ineqToIntv = 
-					 HoldPattern[
-					   Inequality[m_, Less | LessEqual, s_Symbol, Less | LessEqual, M_] | 
-					    Inequality[M_, Greater | GreaterEqual, s_Symbol, 
-					     Greater | GreaterEqual, m_]] :> (s == Interval[{m, M}]);
-					     
-				(*Find when the edges are parallel.  At that point, they are aligned with each other.  There are three cases:
-					1: both axes unused, so both are free to rotate
-					2: second axis previously used, so only first axis is free to rotate					
-					3: first axis previously used, so only second axis is free to rotate					
-				 *)
-				(* -----------------------------------------------------------------------
-				Case 1: both axes unused, so both are free to rotate
-				----------------------------------------------------------------------- *)				
-				zip = 1; (*TODO: THIS IS A HACK FOR DEBUGGING PURPOSES*)
-				If[firstAxisValid == 1 && secondAxisValid == 1,
-					(
-					(*Print["Debug: axis 1 and 2 valid"];*)
-					(*solutions = Solve[Dot[vec1, vec2] == length1 * length2 , {a, a2}, Reals, GeneratedParameters -> (0 &)];*)
-					(*Depending on the "type" of edges we are dealing with, solve using different equations.  The second equation, which uses 
-						the cross product of the vectors, should be able to solve both "zipped" and "lid"-type edges, but I couldn't get it to work...
-						TODO: replace two equations with one that works in both cases
-					*)
-					If[ zip == 1,
-						(*"zipped" type edges*)
-						(
-						(*psolutions = Reduce[{Abs[Simplify[Dot[vec1, vec2]]] == 1*length1 * length2,
-						0 <= Re[a] < 3, 0 <= Re[a2] < 3},
-						{a, a2}, Reals];*)
-						psolutions = FindMinimum[{dist, 0 <= a < 3, 0 <= a2 < 3}, {{a, 0}, {a2, 0}}][[2]];						
-						(*Courtesy of
-						https://mathematica.stackexchange.com/questions/134963/using-the-output-of-reduce
-						*)
-						(*Format the soluctions so that we can actually use them*)
-						(*solutions = {psolutions /. ineqToIntv // ToRules};*)
-						solutions = psolutions /. ineqToIntv // ToRules;						
-						(*solutions = {ToRules[psolutions]};*)
+								d4 = duplicatePair[[2]][[2]];
+								d3 = duplicatePair[[2]][[1]];
+								
+								zip = 1; (*zip*)
+								)
+							];
+							
+						];
 						),
-						(*"lid" type edges*)
-						(
-						psolutions = Reduce[{ 
-						Norm[Cross[vec1, vec2]]^2 < 0.001,
-						0 <= Re[a] < 3, 0 <= Re[a2] < 3},
-						{a, a2}, Reals];
-						(*solutions = {ToRules[psolutions]};*)
-						solutions = {psolutions /. ineqToIntv // ToRules};
-						)
+						{i, 1, Length[joinedPoints]}
 					];
 					
-					(*Find the smallest positive pair of angles in the list of solutions.  The list should always contain at least one positive pair of angles!*)
-					(*Start the angles with the first pair found in the list*)
-		(*			angle1 = a /. FindInstance[solutions[[1]][[1]], a][[1]][[1]];
-					angle2 = a2 /. FindInstance[solutions[[1]][[2]], a2][[1]][[1]];*)							
-					angle1 = (Min[a /. solutions[[1]][[1]]] + Max[a /. solutions[[1]][[1]]]) / 2;
-					angle2 = (Min[a2 /. solutions[[1]][[2]]] + Max[a2 /. solutions[[1]][[2]]]) / 2;		
-
-					Do[
-						(
-						(*temp1 = a /. FindInstance[solutions[[i]][[1]], a][[1]][[1]];
-						temp2 = a2 /. FindInstance[solutions[[i]][[2]], a2][[1]][[1]];*)		
-						temp1 = (Min[a /. solutions[[i]][[1]]] + Max[a /. solutions[[i]][[1]]]) / 2;
-						temp2 = (Min[a2 /. solutions[[i]][[2]]] + Max[a2 /. solutions[[i]][[2]]]) / 2;		
-
-(*						(*Get the next pair of angles from the list*)
-						(temp1 =  a /. solutions[[i]][[1]]; 
-						temp2 =  a2 /. solutions[[i]][[2]];*)
-						(*Are they valid angles and less than the accepted angles, or are the accepted angles invalid (negative)? *)
-						If[temp1 >= 0 && temp2 >= 0 && ((angle1 < 0 || angle2 < 0) || (temp1 < angle1 && temp2 < angle2)),
-							(angle1 = temp1; angle2 = temp2),
-							Null ];
-						),
-						{i, 2, Length[solutions]}
-				 	];
+					
 	
-					),
-					(
-					(* -----------------------------------------------------------------------
-					Case 2: second axis previously used, so only first axis is free to rotate	
-					----------------------------------------------------------------------- *)
-					If[firstAxisValid == 1,
-						(
-						(*Print["Debug: axis 1 valid"];*)
-					(*	
-						Print[dist];
-						Print["d2"];
-						Print[d2];
-						Print["d3"];
-						Print[d3];*)
-						(*solutions = Solve[Dot[vec1, vec2] == length1 * length2 , {a}, Reals, GeneratedParameters -> (0 &)];*)
-						If[ zip == 1,
+					
+					(*If any one of the endpoints in the first edge is on its axis of rotation, then that edge will be "zipped" together with the second edge
+						TODO: This conjecture may be wrong!
+					*)
+					If[duplicatePair[[2]][[1]] == axes[[t3]][[t4]][[1]] || duplicatePair[[2]][[1]] == axes[[t3]][[t4]][[2]],
+						(point4 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]]; (*first point is the point in the second duplicate edge that is not the axis endpoint*)
+						point3 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]]; (*second point in first duplicate edge*)			
+						p4 = tempCoordinates[[duplicatePair[[2]][[1]] ]];
+						p3 = tempCoordinates[[duplicatePair[[2]][[2]] ]];
+	
+						
+						d4 = duplicatePair[[2]][[1]];
+						d3 = duplicatePair[[2]][[2]];
+						zip = 1;
+						),					
+						If[duplicatePair[[2]][[2]] == axes[[t3]][[t4]][[1]] || duplicatePair[[2]][[2]] == axes[[t3]][[t4]][[2]],
+							(point4 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]]; (*first point is the point in the second duplicate edge that is not the axis endpoint*)
+							point3 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]]; (*second point in first duplicate edge*)			
+							p4 = tempCoordinates[[duplicatePair[[2]][[2]] ]];
+							p3 = tempCoordinates[[duplicatePair[[2]][[1]] ]];
+	
+							(*If[MemberQ[duplicatePair, {8,7}],
+								(
+								Print["2"];
+								(*Print[StringForm["point2: ``", p2 ]];*)
+								)
+							];*)
+	
+							d4 = duplicatePair[[2]][[2]];
+							d3 = duplicatePair[[2]][[1]];
+							zip = 1;
+							)
+							,
+							(*check to make sure point 3 isn't on other axis either -- will be the duplicate vertex though, so find that first*)
 							(
-							psolutions = FindMinimum[{dist, 0 <= a < 3}, {a, 0}][[2]];
-							(*psolutions = Reduce[{Abs[Simplify[Dot[vec1, vec2]]] == 1 *length1 * length2,
-							0 <= Re[a] < 3},
-							{a}, Reals];*)
-							(*solutions = {ToRules[psolutions]};*)
-							solutions = psolutions /. ineqToIntv // ToRules;						
+		(*					Print["joinedPoints"];
+							Print[joinedPoints];*)
+							duplicate1 = -1;
+							duplicate2 = -1;
+							Do[
+								(
+	
+								If[MemberQ[joinedPoints[[i]], duplicatePair[[2]][[1]] ] ,
+									(
+									If[duplicatePair[[2]][[1]] == joinedPoints[[i]][[1]] ,
+										(duplicate1 = joinedPoints[[i]][[2]]
+										),
+										duplicate1 = joinedPoints[[i]][[1]]
+									];
+									), Null
+								];
+	
+								If[MemberQ[joinedPoints[[i]], duplicatePair[[2]][[2]] ] ,
+									(
+						(*			Print["found:"];
+									Print[i];*)
+									If[duplicatePair[[2]][[2]] == joinedPoints[[i]][[1]] ,
+										(duplicate2 = joinedPoints[[i]][[2]]
+										),
+										duplicate2 = joinedPoints[[i]][[1]]
+									];
+									), Null
+								];
+									
+								),
+								{i, 1, Length[joinedPoints]}
+						 	];
+						(* 	Print["first"];
+						 	Print[duplicatePair[[2]][[1]]];
+						 	Print["duplicate1"];
+						 	Print[duplicate1];
+						 	Print["second"];
+						 	Print[duplicatePair[[2]][[2]]];
+						 	Print["duplicate2"];
+						 	Print[duplicate2];*)
+						 	
+							If[duplicate1 == axes[[t]][[t2]][[1]] || duplicate1 == axes[[t]][[t2]][[2]],
+								(point4 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]]; (*first point is the point in the second duplicate edge that is not the axis endpoint*)
+								point3 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]]; (*second point in first duplicate edge*)			
+								p4 = tempCoordinates[[duplicatePair[[2]][[1]] ]];
+								p3 = tempCoordinates[[duplicatePair[[2]][[2]] ]];
+			
+								
+								d4 = duplicatePair[[2]][[1]];
+								d3 = duplicatePair[[2]][[2]];
+								zip = 1;
+								),					
+								If[duplicate2 == axes[[t]][[t2]][[1]] || duplicate2 == axes[[t]][[t2]][[2]],
+									(point4 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]]; (*first point is the point in the second duplicate edge that is not the axis endpoint*)
+									point3 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]]; (*second point in first duplicate edge*)			
+									p4 = tempCoordinates[[duplicatePair[[2]][[2]] ]];
+									p3 = tempCoordinates[[duplicatePair[[2]][[1]] ]];
+			
+							
+									(*If[MemberQ[duplicatePair, {8,7}],
+										(
+										Print["3"];
+										(*Print[StringForm["point2: ``", p2 ]];*)
+										)
+									];*)
+					
+									d4 = duplicatePair[[2]][[2]];
+									d3 = duplicatePair[[2]][[1]];
+									zip = 1;
+									)					
+									,Null
+								];
+							];
+							)
+						];
+						(*(
+						If[duplicatePair[[1]][[2]] == axes[[t]][[t2]][[1]] || duplicatePair[[1]][[2]] == axes[[t]][[t2]][[2]],
+							(
+							point1 = r1[tempCoordinates[[duplicatePair[[1]][[2]] ]]];
+							point2 = r1[tempCoordinates[[duplicatePair[[1]][[1]] ]]]; 			
+							p1 = tempCoordinates[[duplicatePair[[1]][[2]] ]];
+							p2 = tempCoordinates[[duplicatePair[[1]][[1]] ]];
 							),
 							(
-							psolutions = Reduce[{
+							(*irrelevant tbh*)
+							point1 = r1[tempCoordinates[[duplicatePair[[1]][[1]] ]]];
+							point2 = r1[tempCoordinates[[duplicatePair[[1]][[2]] ]]]; 			
+							p1 = tempCoordinates[[duplicatePair[[1]][[1]] ]];
+							p2 = tempCoordinates[[duplicatePair[[1]][[2]] ]];
+							)
+						];
+						)*)
+					];		
+	
+	(* ********************************************************************** *)
+	
+					(*make sure point 2 and 3 are duplicates.  This only works if d2 is not literally the same vertex as d3 (ie 3,3) *)
+					(*TODO: remove all code before this that reassigns d3*)
+						If[FreeQ[getDuplicateVertices[duplicateVertices, d3], d2],
+							(
+							If[d3 == duplicatePair[[2]][[1]],
+								(
+								point4 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]];
+								point3 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]]; 			
+								p4 = tempCoordinates[[duplicatePair[[2]][[1]] ]];
+								p3 = tempCoordinates[[duplicatePair[[2]][[2]] ]];
+								
+								d4 = duplicatePair[[2]][[1]];
+								d3 = duplicatePair[[2]][[2]];
+								
+								zip = 1; (*zip*)
+								
+								(*Print["3.1"];*)
+								),
+								(
+								point4 = r2[tempCoordinates[[duplicatePair[[2]][[2]] ]]];
+								point3 = r2[tempCoordinates[[duplicatePair[[2]][[1]] ]]]; 			
+								p4 = tempCoordinates[[duplicatePair[[2]][[2]] ]];
+								p3 = tempCoordinates[[duplicatePair[[2]][[1]] ]];
+								
+								d4 = duplicatePair[[2]][[2]];
+								d3 = duplicatePair[[2]][[1]];
+								
+								zip = 1; (*zip*)
+	
+								(*Print["3.2"];*)
+								)							
+							];	
+							)
+						];
+			
+					(*This second vector is NOT necessarily the second duplicate edge -- it's a vector from a point on the first edge to a point on the second edge*)
+					vec2 = point3 - point4;
+					
+					(*get the length of the second edge (should be a number) *)
+				(*	p3 = tempCoordinates[[duplicatePair[[2]][[1]] ]];
+					p4 = tempCoordinates[[duplicatePair[[2]][[2]] ]];
+					v = p4-p3;
+					length2 = Sqrt[v[[1]]^2 + v[[2]]^2 + v[[3]]^2];*)
+					
+					
+					(*NOTE: dist is used instead of vec1 and vec2 in the new equation: vec1 and vec2 are worthless.  
+					TODO: discard vec1 and vec2*)
+					diff = point2 - point3;
+					dist = diff[[1]]^2  + diff[[2]]^2 + diff[[3]]^2;
+					
+	
+					(*Print["d2"];
+					Print[d2];
+					Print["d3"];
+					Print[d3];*)
+									
+					(*Find the rotation angles now*)
+					angle1 = -1;
+					angle2 = -1;
+					(*Courtesy of
+					https://mathematica.stackexchange.com/questions/134963/using-the-output-of-reduce
+					Converts inequalities to intervals.  It's the only way I could find to generically handle equalities and inequalities, because
+					I couldn't figure out how to make Mathematica test an answer to see if it's an inequality or equality.  ToRules[] doesn't accept
+					inequalities.
+					*)
+					ineqToIntv = 
+						 HoldPattern[
+						   Inequality[m_, Less | LessEqual, s_Symbol, Less | LessEqual, M_] | 
+						    Inequality[M_, Greater | GreaterEqual, s_Symbol, 
+						     Greater | GreaterEqual, m_]] :> (s == Interval[{m, M}]);
+						     
+					(*Find when the edges are parallel.  At that point, they are aligned with each other.  There are three cases:
+						1: both axes unused, so both are free to rotate
+						2: second axis previously used, so only first axis is free to rotate					
+						3: first axis previously used, so only second axis is free to rotate					
+					 *)
+					(* -----------------------------------------------------------------------
+					Case 1: both axes unused, so both are free to rotate
+					----------------------------------------------------------------------- *)				
+					zip = 1; (*TODO: THIS IS A HACK FOR DEBUGGING PURPOSES*)
+					If[firstAxisValid == 1 && secondAxisValid == 1,
+						(
+						(*Print["Debug: axis 1 and 2 valid"];*)
+						(*solutions = Solve[Dot[vec1, vec2] == length1 * length2 , {a, a2}, Reals, GeneratedParameters -> (0 &)];*)
+						(*Depending on the "type" of edges we are dealing with, solve using different equations.  The second equation, which uses 
+							the cross product of the vectors, should be able to solve both "zipped" and "lid"-type edges, but I couldn't get it to work...
+							TODO: replace two equations with one that works in both cases
+						*)
+						If[ zip == 1,
+							(*"zipped" type edges*)
+							(
+							(*psolutions = Reduce[{Abs[Simplify[Dot[vec1, vec2]]] == 1*length1 * length2,
+							0 <= Re[a] < 3, 0 <= Re[a2] < 3},
+							{a, a2}, Reals];*)
+							psolutions = FindMinimum[{dist, 0 <= a < 3, 0 <= a2 < 3}, {{a, 0}, {a2, 0}}][[2]];						
+							(*Courtesy of
+							https://mathematica.stackexchange.com/questions/134963/using-the-output-of-reduce
+							*)
+							(*Format the soluctions so that we can actually use them*)
+							(*solutions = {psolutions /. ineqToIntv // ToRules};*)
+							solutions = psolutions /. ineqToIntv // ToRules;						
+							(*solutions = {ToRules[psolutions]};*)
+							),
+							(*"lid" type edges*)
+							(
+							psolutions = Reduce[{ 
 							Norm[Cross[vec1, vec2]]^2 < 0.001,
-							0 <= Re[a] < 3},
-							{a}, Reals];
+							0 <= Re[a] < 3, 0 <= Re[a2] < 3},
+							{a, a2}, Reals];
 							(*solutions = {ToRules[psolutions]};*)
 							solutions = {psolutions /. ineqToIntv // ToRules};
 							)
@@ -3112,269 +3140,341 @@ connect[coordinates_, faces_, adjacentFaces_, axes_, usedAxes_, joinedPoints_, d
 						
 						(*Find the smallest positive pair of angles in the list of solutions.  The list should always contain at least one positive pair of angles!*)
 						(*Start the angles with the first pair found in the list*)
-			(*			If[zip == 1+1 ,
-							(
-							angle1 = a /. solutions[[1]][[1]]; (*Solutions are listed in the order that you put in the variables into the Solve function*)
-							angle2 = 0;		
-							),
-							(
-							angle1 = a /. FindInstance[solutions[[1]][[1]], a][[1]][[1]];
-							angle2 = 0;		
-							)
-						];		*)
+			(*			angle1 = a /. FindInstance[solutions[[1]][[1]], a][[1]][[1]];
+						angle2 = a2 /. FindInstance[solutions[[1]][[2]], a2][[1]][[1]];*)							
 						angle1 = (Min[a /. solutions[[1]][[1]]] + Max[a /. solutions[[1]][[1]]]) / 2;
-						angle2 = 0;		
-				
-						(*angle1 = a /. solutions[[1]][[1]]; (*Solutions are listed in the order that you put in the variables into the Solve function*)
-						angle2 = 0;	*)	
+						angle2 = (Min[a2 /. solutions[[1]][[2]]] + Max[a2 /. solutions[[1]][[2]]]) / 2;		
+	
 						Do[
-							(*Get the next pair of angles from the list*)
 							(
-(*							If[zip == 1+1 ,
-								(
-								temp1 = a /. solutions[[i]][[1]]; (*Solutions are listed in the order that you put in the variables into the Solve function*)
-								),
-								(
-								temp1 = a /. FindInstance[solutions[[i]][[1]], a][[1]][[1]];
-								)
-							];*)							
+							(*temp1 = a /. FindInstance[solutions[[i]][[1]], a][[1]][[1]];
+							temp2 = a2 /. FindInstance[solutions[[i]][[2]], a2][[1]][[1]];*)		
 							temp1 = (Min[a /. solutions[[i]][[1]]] + Max[a /. solutions[[i]][[1]]]) / 2;
-							
-							(*(temp1 =  a /. solutions[[i]][[1]];*) 
+							temp2 = (Min[a2 /. solutions[[i]][[2]]] + Max[a2 /. solutions[[i]][[2]]]) / 2;		
+	
+	(*						(*Get the next pair of angles from the list*)
+							(temp1 =  a /. solutions[[i]][[1]]; 
+							temp2 =  a2 /. solutions[[i]][[2]];*)
 							(*Are they valid angles and less than the accepted angles, or are the accepted angles invalid (negative)? *)
-							If[temp1 >= 0 && (angle1 < 0  || temp1 < angle1),
-								(angle1 = temp1),
+							If[temp1 >= 0 && temp2 >= 0 && ((angle1 < 0 || angle2 < 0) || (temp1 < angle1 && temp2 < angle2)),
+								(angle1 = temp1; angle2 = temp2),
 								Null ];
 							),
 							{i, 2, Length[solutions]}
 					 	];
-	
+		
 						),
-						(* -----------------------------------------------------------------------
-						Case 3: first axis previously used, so only second axis is free to rotate	
-						----------------------------------------------------------------------- *)
 						(
-						(*Print["Debug: axis 2 valid"];*)
-						(*solutions = Solve[Dot[vec1, vec2] == length1 * length2 , {a2}, Reals, GeneratedParameters -> (0 &)];*)
-						If[ zip == 1,
+						(* -----------------------------------------------------------------------
+						Case 2: second axis previously used, so only first axis is free to rotate	
+						----------------------------------------------------------------------- *)
+						If[firstAxisValid == 1,
 							(
-							psolutions = FindMinimum[{dist, 0 <= a2 < 3}, {a2, 0}][[2]];
-							(*psolutions = Reduce[{Abs[Simplify[Dot[vec1, vec2]]] == 1 * length1 * length2,
-								0 <= Re[a2] < 3},
-								{a2}, Reals];*)
-							(*solutions = {ToRules[psolutions]};*)
-							solutions = psolutions /. ineqToIntv // ToRules;						
+							(*Print["Debug: axis 1 valid"];*)
+						(*	
+							Print[dist];
+							Print["d2"];
+							Print[d2];
+							Print["d3"];
+							Print[d3];*)
+							(*solutions = Solve[Dot[vec1, vec2] == length1 * length2 , {a}, Reals, GeneratedParameters -> (0 &)];*)
+							If[ zip == 1,
+								(
+								psolutions = FindMinimum[{dist, 0 <= a < 3}, {a, 0}][[2]];
+								(*psolutions = Reduce[{Abs[Simplify[Dot[vec1, vec2]]] == 1 *length1 * length2,
+								0 <= Re[a] < 3},
+								{a}, Reals];*)
+								(*solutions = {ToRules[psolutions]};*)
+								solutions = psolutions /. ineqToIntv // ToRules;						
+								),
+								(
+								psolutions = Reduce[{
+								Norm[Cross[vec1, vec2]]^2 < 0.001,
+								0 <= Re[a] < 3},
+								{a}, Reals];
+								(*solutions = {ToRules[psolutions]};*)
+								solutions = {psolutions /. ineqToIntv // ToRules};
+								)
+							];
+							
+							(*Find the smallest positive pair of angles in the list of solutions.  The list should always contain at least one positive pair of angles!*)
+							(*Start the angles with the first pair found in the list*)
+				(*			If[zip == 1+1 ,
+								(
+								angle1 = a /. solutions[[1]][[1]]; (*Solutions are listed in the order that you put in the variables into the Solve function*)
+								angle2 = 0;		
+								),
+								(
+								angle1 = a /. FindInstance[solutions[[1]][[1]], a][[1]][[1]];
+								angle2 = 0;		
+								)
+							];		*)
+							angle1 = (Min[a /. solutions[[1]][[1]]] + Max[a /. solutions[[1]][[1]]]) / 2;
+							angle2 = 0;		
+					
+							(*angle1 = a /. solutions[[1]][[1]]; (*Solutions are listed in the order that you put in the variables into the Solve function*)
+							angle2 = 0;	*)	
+							Do[
+								(*Get the next pair of angles from the list*)
+								(
+	(*							If[zip == 1+1 ,
+									(
+									temp1 = a /. solutions[[i]][[1]]; (*Solutions are listed in the order that you put in the variables into the Solve function*)
+									),
+									(
+									temp1 = a /. FindInstance[solutions[[i]][[1]], a][[1]][[1]];
+									)
+								];*)							
+								temp1 = (Min[a /. solutions[[i]][[1]]] + Max[a /. solutions[[i]][[1]]]) / 2;
+								
+								(*(temp1 =  a /. solutions[[i]][[1]];*) 
+								(*Are they valid angles and less than the accepted angles, or are the accepted angles invalid (negative)? *)
+								If[temp1 >= 0 && (angle1 < 0  || temp1 < angle1),
+									(angle1 = temp1),
+									Null ];
+								),
+								{i, 2, Length[solutions]}
+						 	];
+		
 							),
+							(* -----------------------------------------------------------------------
+							Case 3: first axis previously used, so only second axis is free to rotate	
+							----------------------------------------------------------------------- *)
 							(
-							psolutions = Reduce[{
+							(*Print["Debug: axis 2 valid"];*)
+							(*solutions = Solve[Dot[vec1, vec2] == length1 * length2 , {a2}, Reals, GeneratedParameters -> (0 &)];*)
+							If[ zip == 1,
+								(
+								psolutions = FindMinimum[{dist, 0 <= a2 < 3}, {a2, 0}][[2]];
+								(*psolutions = Reduce[{Abs[Simplify[Dot[vec1, vec2]]] == 1 * length1 * length2,
+									0 <= Re[a2] < 3},
+									{a2}, Reals];*)
+								(*solutions = {ToRules[psolutions]};*)
+								solutions = psolutions /. ineqToIntv // ToRules;						
+								),
+								(
+								psolutions = Reduce[{
+									Norm[Cross[vec1, vec2]]^2 < 0.001,
+									0 <= Re[a2] < 3},
+									{a2}, Reals];
+								(*solutions = {ToRules[psolutions]};*)
+								solutions = {psolutions /. ineqToIntv // ToRules};
+								)
+							];
+	(*						psolutions = Reduce[{Abs[Dot[vec1, vec2]] == Abs[length1 * length2],
 								Norm[Cross[vec1, vec2]]^2 < 0.001,
 								0 <= Re[a2] < 3},
 								{a2}, Reals];
-							(*solutions = {ToRules[psolutions]};*)
-							solutions = {psolutions /. ineqToIntv // ToRules};
-							)
-						];
-(*						psolutions = Reduce[{Abs[Dot[vec1, vec2]] == Abs[length1 * length2],
-							Norm[Cross[vec1, vec2]]^2 < 0.001,
-							0 <= Re[a2] < 3},
-							{a2}, Reals];
-						solutions = {ToRules[psolutions]};
-*)						
-						(*Find the smallest positive pair of angles in the list of solutions.  The list should always contain at least one positive pair of angles!*)
-						(*Start the angles with the first pair found in the list*)
-						(*If[zip == 1+1 ,
-							(
-							angle1 = 0;
-							angle2 = a2 /. solutions[[1]][[1]];		
-							),
-							(
-							angle1 = 0;
-							angle2 = a2 /. FindInstance[solutions[[1]][[1]], a2][[1]][[1]];		
-							)
-						];	*)
-						angle1 = 0;
-						angle2 = (Min[a2 /. solutions[[1]][[1]]] + Max[a2 /. solutions[[1]][[1]]]) / 2;
-(*						angle1 = 0; (*Solutions are listed in the order that you put in the variables into the Solve function*)
-						angle2 = a2 /. solutions[[1]][[1]];*)		
-						Do[
-							(*Get the next pair of angles from the list*)
-							( 
-(*							If[zip == 1+1 ,
+							solutions = {ToRules[psolutions]};
+	*)						
+							(*Find the smallest positive pair of angles in the list of solutions.  The list should always contain at least one positive pair of angles!*)
+							(*Start the angles with the first pair found in the list*)
+							(*If[zip == 1+1 ,
 								(
-								temp2 = a2 /. solutions[[i]][[1]];		
+								angle1 = 0;
+								angle2 = a2 /. solutions[[1]][[1]];		
 								),
 								(
-								temp2 = a2 /. FindInstance[solutions[[i]][[1]], a2][[1]][[1]];		
+								angle1 = 0;
+								angle2 = a2 /. FindInstance[solutions[[1]][[1]], a2][[1]][[1]];		
 								)
-							];*)	
-							temp2 = (Min[a2 /. solutions[[i]][[1]]] + Max[a2 /. solutions[[i]][[1]]]) / 2;
-							
-							(*temp2 =  a2 /. solutions[[i]][[1]];*)
-							(*Are they valid angles and less than the accepted angles, or are the accepted angles invalid (negative)? *)
-							If[temp2 >= 0 && (angle2 < 0 || temp2 < angle2),
-								(angle2 = temp2),
-								Null ];
-							),
-							{i, 2, Length[solutions]}
-					 	];
-	
+							];	*)
+							angle1 = 0;
+							angle2 = (Min[a2 /. solutions[[1]][[1]]] + Max[a2 /. solutions[[1]][[1]]]) / 2;
+	(*						angle1 = 0; (*Solutions are listed in the order that you put in the variables into the Solve function*)
+							angle2 = a2 /. solutions[[1]][[1]];*)		
+							Do[
+								(*Get the next pair of angles from the list*)
+								( 
+	(*							If[zip == 1+1 ,
+									(
+									temp2 = a2 /. solutions[[i]][[1]];		
+									),
+									(
+									temp2 = a2 /. FindInstance[solutions[[i]][[1]], a2][[1]][[1]];		
+									)
+								];*)	
+								temp2 = (Min[a2 /. solutions[[i]][[1]]] + Max[a2 /. solutions[[i]][[1]]]) / 2;
+								
+								(*temp2 =  a2 /. solutions[[i]][[1]];*)
+								(*Are they valid angles and less than the accepted angles, or are the accepted angles invalid (negative)? *)
+								If[temp2 >= 0 && (angle2 < 0 || temp2 < angle2),
+									(angle2 = temp2),
+									Null ];
+								),
+								{i, 2, Length[solutions]}
+						 	];
+		
+							)
+						];
 						)
 					];
-					)
-				];
-				
-	(*			Print["a"];
-				Print[angle1];
-				Print["a2"];
-				Print[angle2];*)
-				
-(*				If[MemberQ[duplicatePair, {6,1}],
-					(
-					Print[duplicatePair];
-					Print[StringForm["point2: ``", p2 ]];
-					Print[StringForm["point3: ``", p3 ]];
-					Print[StringForm["d2: ``", d2 ]];
-					Print[StringForm["d3: ``", d3 ]];
-					Print[StringForm["diff: ``", diff ]];
-					Print[StringForm["angle1: ``", angle1 ]];
-					Print[StringForm["angle2: ``", angle2 ]];
-					Print[StringForm["firstAxisValid: ``", firstAxisValid]];
-					Print[StringForm["secondAxisValid: ``", secondAxisValid]];
-					Print[StringForm["axes[[t]][[t2]]: ``", axes[[t]][[t2]] ]];
-					Print[StringForm["axes[[t3]][[t4]]: ``", axes[[t3]][[t4]] ]];
 					
-					)
-				];*)
-				
-				(*Do the animation if the user wanted it*)
-				frames = {};
-				If[verbose > 0,
-					(
+		(*			Print["a"];
+					Print[angle1];
+					Print["a2"];
+					Print[angle2];*)
+					
+	(*				If[MemberQ[duplicatePair, {6,1}],
+						(
+	
+						
+						)
+					];*)
+(*						Print[duplicatePair];
+						(*Print[StringForm["point2: ``", p2 ]];*)
+						(*Print[StringForm["point3: ``", p3 ]];*)
+						Print[StringForm["d2: ``", d2 ]];					
+						Print[StringForm["d3: ``", d3 ]];
+						(*Print[StringForm["diff: ``", diff ]];*)
+						Print[StringForm["angle1: ``", angle1 ]];
+						Print[StringForm["angle2: ``", angle2 ]];
+						Print[StringForm["firstAxisValid: ``", firstAxisValid]];
+						Print[StringForm["secondAxisValid: ``", secondAxisValid]];
+						Print[StringForm["axes[[t]][[t2]]: ``", axes[[t]][[t2]] ]];
+						Print[StringForm["axes[[t3]][[t4]]: ``", axes[[t3]][[t4]] ]];
+						Print[StringForm["first axis faces: ``", data[[1]][[2]]]];
+						Print[StringForm["second axis faces: ``", data[[2]][[2]]]];
+						Print[StringForm["duplicate vertices: ``", duplicateVertices]];
+									*)
+					(*Do the animation if the user wanted it*)
+					frames = {};
+					If[verbose > 0,
+						(
+						(*Rotate the first faces by angle1, and the second faces by angle2*)
+						(*Get points in first faces*)
+						firstPoints = getPointsFromFaces[faces, data[[1]][[2]]];
+						(*Get points in second faces*)
+						secondPoints = getPointsFromFaces[faces, data[[2]][[2]]];
+						(*Rotate the points*)
+		
+		
+						Do[
+							fakeR1 = RotationTransform[-angle1(j/verbose), firstAxis, firstAnchor];
+							fakeR2 = RotationTransform[-angle2(j/verbose), secondAxis, secondAnchor];
+							fakeCoordinates = tempCoordinates;
+							(
+							Do[
+								(
+								fakeCoordinates = ReplacePart[fakeCoordinates, firstPoints[[i]] -> N[fakeR1[fakeCoordinates[[firstPoints[[i]]]] ]] ];
+								),
+								{i, 1, Length[firstPoints]}  
+							];
+							Do[
+								(
+								fakeCoordinates = ReplacePart[fakeCoordinates, secondPoints[[i]] -> N[fakeR2[fakeCoordinates[[secondPoints[[i]]]] ]] ];
+								),
+								{i, 1, Length[secondPoints]}                                      
+							];					
+	
+	
+							(*export to filepath specified*)
+							AppendTo[frames, displayShape[fakeCoordinates, faces, bounds]];
+							(*string = ToString[StringJoin[filePath, "''.gif"]];
+							Export[ToString[
+								  StringForm[
+									   filePath<>"``.gif", foldNumber*100 + j]], displayShape[fakeCoordinates, faces]];*)
+							),
+							{j, 1, verbose}                                      
+						];
+	
+						),Null
+					];
+	
+					
+					(*Recreate the transformations, this time with real angles*)
+					r1 = RotationTransform[-angle1, firstAxis, firstAnchor];
+					r2 = RotationTransform[-angle2, secondAxis, secondAnchor];
+					
+					(*OLD, never worked
+					
+					eq1 = N[r1[tempCoordinates[[duplicatePair[[1]]]]]]; (*First system of equations*)
+					eq2 = N[r2[tempCoordinates[[duplicatePair[[2]]]]]]; (*Second system of equations*)
+					
+					Print[eq1];
+					Print[eq2];
+					(*Only solve this equations for the real solutions*)
+					angle1 = Solve[{eq1[[1]] == eq2[[1]],
+									eq1[[2]] == eq2[[2]],
+									eq1[[3]] == eq2[[3]]}, a];
+			
+					angle2 = Solve[{eq1[[1]] == eq2[[1]],
+									eq1[[2]] == eq2[[2]],
+									eq1[[3]] == eq2[[3]]}, a2];
+			
+					r1 = RotationTransform[-angle1, firstAxis, firstAnchor];
+					r2 = RotationTransform[-angle2, secondAxis, secondAnchor];
+					
+					*)
+					
+		
+					
 					(*Rotate the first faces by angle1, and the second faces by angle2*)
 					(*Get points in first faces*)
 					firstPoints = getPointsFromFaces[faces, data[[1]][[2]]];
 					(*Get points in second faces*)
 					secondPoints = getPointsFromFaces[faces, data[[2]][[2]]];
 					(*Rotate the points*)
-	
-	
 					Do[
-						fakeR1 = RotationTransform[-angle1(j/verbose), firstAxis, firstAnchor];
-						fakeR2 = RotationTransform[-angle2(j/verbose), secondAxis, secondAnchor];
-						fakeCoordinates = tempCoordinates;
 						(
-						Do[
-							(
-							fakeCoordinates = ReplacePart[fakeCoordinates, firstPoints[[i]] -> N[fakeR1[fakeCoordinates[[firstPoints[[i]]]] ]] ];
-							),
-							{i, 1, Length[firstPoints]}  
-						];
-						Do[
-							(
-							fakeCoordinates = ReplacePart[fakeCoordinates, secondPoints[[i]] -> N[fakeR2[fakeCoordinates[[secondPoints[[i]]]] ]] ];
-							),
-							{i, 1, Length[secondPoints]}                                      
-						];					
-
-
-						(*export to filepath specified*)
-						AppendTo[frames, displayShape[fakeCoordinates, faces, bounds]];
-						(*string = ToString[StringJoin[filePath, "''.gif"]];
-						Export[ToString[
-							  StringForm[
-								   filePath<>"``.gif", foldNumber*100 + j]], displayShape[fakeCoordinates, faces]];*)
+						tempCoordinates = ReplacePart[tempCoordinates, firstPoints[[i]] -> N[r1[tempCoordinates[[firstPoints[[i]]]] ]] ];
 						),
-						{j, 1, verbose}                                      
+						{i, 1, Length[firstPoints]}  
+					];
+					Do[
+						(
+						tempCoordinates = ReplacePart[tempCoordinates, secondPoints[[i]] -> N[r2[tempCoordinates[[secondPoints[[i]]]] ]] ];
+						),
+						{i, 1, Length[secondPoints]}                                      
 					];
 
-					),Null
-				];
 
-				
-				(*Recreate the transformations, this time with real angles*)
-				r1 = RotationTransform[-angle1, firstAxis, firstAnchor];
-				r2 = RotationTransform[-angle2, secondAxis, secondAnchor];
-				
-				(*OLD, never worked
-				
-				eq1 = N[r1[tempCoordinates[[duplicatePair[[1]]]]]]; (*First system of equations*)
-				eq2 = N[r2[tempCoordinates[[duplicatePair[[2]]]]]]; (*Second system of equations*)
-				
-				Print[eq1];
-				Print[eq2];
-				(*Only solve this equations for the real solutions*)
-				angle1 = Solve[{eq1[[1]] == eq2[[1]],
-								eq1[[2]] == eq2[[2]],
-								eq1[[3]] == eq2[[3]]}, a];
+									
+					
+					(*align the edge endpoints now*)
+					If[firstAxisValid == 1,
+						(
+						tempCoordinates = ReplacePart[tempCoordinates, duplicatePair[[1]][[1]] -> tempCoordinates[[duplicatePair[[2]][[2]] ]] ];
+						tempCoordinates = ReplacePart[tempCoordinates, duplicatePair[[1]][[2]] -> tempCoordinates[[duplicatePair[[2]][[1]] ]] ];
+						),
+						(
+						tempCoordinates = ReplacePart[tempCoordinates, duplicatePair[[2]][[1]] -> tempCoordinates[[duplicatePair[[1]][[2]] ]] ];
+						tempCoordinates = ReplacePart[tempCoordinates, duplicatePair[[2]][[2]] -> tempCoordinates[[duplicatePair[[1]][[1]] ]] ];
+						)
+					];
+					
+
+					result = {tempCoordinates};
+					
+					(*
+					Add the axes to the list of used axes.  The joined/used duplicate edges will be updated outside of this function.
+					*)
+					usedAxesCopy = usedAxes;
+					AppendTo[usedAxesCopy , axes[[t]][[t2]]];
+					AppendTo[usedAxesCopy , axes[[t3]][[t4]]];
+					AppendTo[usedAxesCopy , {axes[[t]][[t2]][[2]], axes[[t]][[t2]][[1]]}];
+					AppendTo[usedAxesCopy , {axes[[t3]][[t4]][[2]], axes[[t3]][[t4]][[1]]}];
 		
-				angle2 = Solve[{eq1[[1]] == eq2[[1]],
-								eq1[[2]] == eq2[[2]],
-								eq1[[3]] == eq2[[3]]}, a2];
-		
-				r1 = RotationTransform[-angle1, firstAxis, firstAnchor];
-				r2 = RotationTransform[-angle2, secondAxis, secondAnchor];
-				
-				*)
-				
-	
-				
-				(*Rotate the first faces by angle1, and the second faces by angle2*)
-				(*Get points in first faces*)
-				firstPoints = getPointsFromFaces[faces, data[[1]][[2]]];
-				(*Get points in second faces*)
-				secondPoints = getPointsFromFaces[faces, data[[2]][[2]]];
-				(*Rotate the points*)
-				Do[
-					(
-					tempCoordinates = ReplacePart[tempCoordinates, firstPoints[[i]] -> N[r1[tempCoordinates[[firstPoints[[i]]]] ]] ];
-					),
-					{i, 1, Length[firstPoints]}  
-				];
-				Do[
-					(
-					tempCoordinates = ReplacePart[tempCoordinates, secondPoints[[i]] -> N[r2[tempCoordinates[[secondPoints[[i]]]] ]] ];
-					),
-					{i, 1, Length[secondPoints]}                                      
-				];
-	
-				
-				(*align the edge endpoints now*)
-				If[firstAxisValid == 1,
-					(
-					tempCoordinates = ReplacePart[tempCoordinates, duplicatePair[[1]][[1]] -> tempCoordinates[[duplicatePair[[2]][[2]] ]] ];
-					tempCoordinates = ReplacePart[tempCoordinates, duplicatePair[[1]][[2]] -> tempCoordinates[[duplicatePair[[2]][[1]] ]] ];
-					),
-					(
-					tempCoordinates = ReplacePart[tempCoordinates, duplicatePair[[2]][[1]] -> tempCoordinates[[duplicatePair[[1]][[2]] ]] ];
-					tempCoordinates = ReplacePart[tempCoordinates, duplicatePair[[2]][[2]] -> tempCoordinates[[duplicatePair[[1]][[1]] ]] ];
+					(*Add the modified used axes list to the result*)
+					AppendTo[result, usedAxesCopy];
+					
+					(*Modify joined points list*)
+					joinedPointsCopy = joinedPoints;
+					AppendTo[joinedPointsCopy, {duplicatePair[[1]][[1]], duplicatePair[[2]][[2]]}];
+					AppendTo[joinedPointsCopy, {duplicatePair[[1]][[2]], duplicatePair[[2]][[1]]}];
+					AppendTo[result, joinedPointsCopy];
+					AppendTo[result, 1]; (*fold occurred*)
+					AppendTo[result, frames];
+					
 					)
-				];				
-				
-				result = {tempCoordinates};
-				
-				(*
-				Add the axes to the list of used axes.  The joined/used duplicate edges will be updated outside of this function.
-				*)
-				usedAxesCopy = usedAxes;
-				AppendTo[usedAxesCopy , axes[[t]][[t2]]];
-				AppendTo[usedAxesCopy , axes[[t3]][[t4]]];
-				AppendTo[usedAxesCopy , {axes[[t]][[t2]][[2]], axes[[t]][[t2]][[1]]}];
-				AppendTo[usedAxesCopy , {axes[[t3]][[t4]][[2]], axes[[t3]][[t4]][[1]]}];
-	
-				(*Add the modified used axes list to the result*)
-				AppendTo[result, usedAxesCopy];
-				
-				(*Modify joined points list*)
-				joinedPointsCopy = joinedPoints;
-				AppendTo[joinedPointsCopy, {duplicatePair[[1]][[1]], duplicatePair[[2]][[2]]}];
-				AppendTo[joinedPointsCopy, {duplicatePair[[1]][[2]], duplicatePair[[2]][[1]]}];
-				AppendTo[result, joinedPointsCopy];
-				AppendTo[result, 1]; (*fold occurred*)
-				AppendTo[result, frames];
+				];
 				
 				)
 			];				
 			
+			
+
+
 			)
 		];
 		
@@ -3382,6 +3482,123 @@ connect[coordinates_, faces_, adjacentFaces_, axes_, usedAxes_, joinedPoints_, d
 	]
 
 
+(*returns {coordinates, frames}  *)
+alignShape[faces_, adjacentFaces_, coordinates_, verbose_]:=
+	Module[{normal, normal2, rotateZ, rotateY, zAngle, yAngle, halfTime1, halfTime2,
+		faceList, distance, rT, rAngle, normalStart, rotationAxis, min, max, firstPoints, r1, fakeR1, fakeCoordinates, frames, output, i, j, tempCoordinates},
+		(*Align the first face with the xy plane*)
+		
+		tempCoordinates = coordinates;
+		frames = {};
+		(*get normal of first face*)					
+		normalStart = N[Normalize[Cross[tempCoordinates[[faces[[1]][[3]] ]] - tempCoordinates[[faces[[1]][[2]] ]], tempCoordinates[[faces[[1]][[1]] ]] - tempCoordinates[[faces[[1]][[2]] ]] ] ]];
+		normal = normalStart;
+		(*Print[StringForm["normal: ``", normal]];*)
+							
+		rotateZ = RotationTransform[z, {0,0,1}, {0,0,0}];
+		rotateY = RotationTransform[y, {0,1,0}, {0,0,0}];
+		
+		normal2 = rotateZ[normal];					
+		(*max = NMaxValue[{ Dot[normal2, {1,0,0}], -Pi <= z < Pi}, z];
+		zAngle = z /. Last[NSolve[{ Dot[normal2, {1,0,0}] == max, -Pi <= z < Pi}, z]];*)
+		zAngle = z /. Last[FindMaximum[{ Dot[normal2, {1,0,0}], -Pi <= z < Pi}, {z,0}]];
+		rotateZ = RotationTransform[zAngle, {0,0,1}, {0,0,0}];
+		normal = rotateZ[normal];
+
+	(*	Print[StringForm["normal2: ``", normal2]];
+		Print[StringForm["zAngle: ``", zAngle]];
+		Print[StringForm["normal: ``", normal]];*)
+		
+		normal2 = rotateY[normal];
+		distance = normal2[[1]]^2 + normal2[[2]]^2 + (-1-normal2[[3]])^2;
+		(*find minimum (basically 0) *)
+		(*min = NMinValue[{distance, -Pi <= y < Pi }, y];*)
+		
+		(*yAngle = y /. Last[FindMaximum[{ Dot[-normal2, {0,0,1}], -Pi <= y < Pi}, {y, -Pi}]];*)
+		(*yAngle = y /. Last[NSolve[{ distance == min, -Pi <= y < Pi}, y]];*)
+		yAngle = y /. Last[FindMinimum[{ distance, -Pi <= y < Pi}, {y,0}]];
+
+		rotateY = RotationTransform[yAngle, {0,1,0}, {0,0,0}];
+		normal = rotateY[normal];
+	(*	Print[StringForm["yAngle: ``", yAngle]];					
+		Print[StringForm["normal: ``", normal]];
+		Print[StringForm["normal2: ``", normal2]];*)				
+
+		(*get final rotation axis*)
+		rotationAxis = Cross[normalStart, normal];
+		rT = RotationTransform[zy, rotationAxis, {0,0,0}];
+		normal2 = rT[normalStart];
+		
+	(*	Print[StringForm["normal2: ``", normal2]];*)
+			
+		distance =  normal2[[1]]^2 + normal2[[2]]^2 + (-1 - normal2[[3]])^2; 
+		(*min = NMinValue[{distance, -Pi <= zy < Pi }, zy];
+		rAngle = zy /. Last[NSolve[{ distance == min}, zy]];*)					
+		rAngle = zy /. Last[FindMinimum[{ distance}, {zy,0}]];
+		
+		rT = RotationTransform[rAngle, rotationAxis, {0,0,0}];
+		normal = rT[normalStart];					
+		(*Print[StringForm["rAngle: ``", rAngle]];					
+		Print[StringForm["rotationAxis: ``", rotationAxis]];					
+		Print[StringForm["normal: ``", normal]];*)
+		
+		
+		halfTime1 = Abs[Round[rAngle * 10, 1]];
+		If[halfTime1 <= 0 && zAngle >= 1, halfTime1 = 1];
+		(*halfTime2 = Abs[Round[zAngle * 10, 1]];
+		If[halfTime2 <= 0 && zAngle >= 1, halfTime2 = 1];*)
+		
+		faceList = {};
+		Do[
+			(
+			AppendTo[faceList, j];
+			),
+			{j, 1, Max[adjacentFaces, 2]}
+		];
+		firstPoints = getPointsFromFaces[faces, faceList];
+		
+		(*Do the animation if the user wanted it*)
+		If[verbose > 0,
+			(
+			(*Rotate the faces by zAngle first*)
+		(*	Print["First Point"];
+			Print[firstPoints];
+			Print[halfTime1];*)
+			
+			Do[
+				fakeR1 = RotationTransform[rAngle*(j/halfTime1), rotationAxis, tempCoordinates[[faces[[1]][[2]] ]]];
+				fakeCoordinates = tempCoordinates;
+				(
+				Do[
+					(
+					fakeCoordinates = ReplacePart[fakeCoordinates, firstPoints[[i]] -> N[fakeR1[fakeCoordinates[[firstPoints[[i]]]] ]] ];
+					),
+					{i, 1, Length[firstPoints]}  
+				];
+
+				(*add frame to list*)
+				AppendTo[frames, displayShape[fakeCoordinates, faces, {}]];
+				),
+				{j, 1, halfTime1}
+			];
+			)
+		];
+
+		(*Recreate the transformation, this time with real angles*)
+		r1 = RotationTransform[rAngle, rotationAxis, tempCoordinates[[faces[[1]][[2]] ]]];
+
+		(*Rotate the first faces by angle1, and the second faces by angle2*)					
+		(*Rotate the points by zAngle*)
+		Do[
+			(
+			tempCoordinates = ReplacePart[tempCoordinates, firstPoints[[i]] -> N[r1[tempCoordinates[[firstPoints[[i]]]] ]] ];
+			),
+			{i, 1, Length[firstPoints]}  
+		];
+
+		output = {tempCoordinates, frames};
+		Return[output];			
+	];
 
 (* Sets the endpoint coordinates of the first edge equal to the endpoints of the second edge, making them equivalent.
 	Parameters:
