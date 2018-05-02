@@ -37,16 +37,20 @@ need to have Mathematica installed on your computer.
 	how the graph will be input into the function (don't forget the	face which surrounds the entire graph!)	
 
 	Call the function like this:
-		polyhedralGraphToShape[faces, edgeLength, filePath, verbose]
+		polyhedralGraphToShape[faces, edgeLength, filePath, verbose, alignFreq]
 
 	Parameters:
-	faces - vertices which comprise each face {{1,2,3,4},...} -- assumption is that each vertex is
-		adjacent to the next.  Winding order (clockwise vs counterclockwise) is irrelevant.
+	faces - vertices which comprise each face {{1,2,3,4},...} -- assumption is that each vertex
+		is adjacent to the next.  Winding order (clockwise vs counterclockwise) is irrelevant for
+		every face EXCEPT THE FIRST.  The first face is assumed to wind clockwise.
 	edgeLength - length of each edge
 	filePath - can be absolute or relative, must be a string formatted so Mathematica can read it.
 		If relative, Mathematica will assume root is Documents directory (for Windows anyway)
 	verbose - number of frames per fold animation.  0 indicates no animation should be created
-
+	alignFreq - how often to align first face with xy plane 
+		0: never
+		-1: at end of folding
+		x >= 1: every x folds 
 
 
 	# using netToShape #	
@@ -61,8 +65,9 @@ need to have Mathematica installed on your computer.
 		netToShape[faces, adjacentFaces, duplicates, edgeLength, filePath, verbose]
 
 	Parameters:
-	faces - vertices which comprise each face {{1,2,3,4},...} -- assumption is that each vertex is
-		adjacent to the next, in clockwise order!
+	faces - vertices which comprise each face {{1,2,3,4},...} -- assumption is that each vertex
+		is adjacent to the next.  Winding order (clockwise vs counterclockwise) is irrelevant for
+		every face EXCEPT THE FIRST.  The first face is assumed to wind clockwise.
 	adjacentFaces - dual of input net, where each face is a vertex whose value is its position in
 		the faces list.  Format like {{1,2}, {2,3}, {2,4},..}, where each pair is two adjacent faces
 	duplicates - duplicate edges in graph, with endpoints in clockwise order
@@ -70,7 +75,10 @@ need to have Mathematica installed on your computer.
 	filePath - can be absolute or relative, must be a string formatted so Mathematica can read it.
 		If relative, Mathematica will assume root is Documents directory (for Windows anyway)
 	verbose - number of frames per fold animation.  0 indicates no animation should be created
-
+	alignFreq - how often to align first face with xy plane 
+		0: never
+		-1: at end of folding
+		x >= 1: every x folds 
 
 
 # Limitations/errata #
