@@ -40,9 +40,9 @@ need to have Mathematica installed on your computer.
 		polyhedralGraphToShape[faces, edgeLength, filePath, verbose, alignFreq]
 
 	Parameters:
-	faces - vertices which comprise each face {{1,2,3,4},...} -- assumption is that each vertex
-		is adjacent to the next.  Winding order (clockwise vs counterclockwise) is irrelevant for
-		every face EXCEPT THE FIRST.  The first face is assumed to wind clockwise.
+	faces - vertices which comprise each face in the polyhedral graph {{1,2,3,4},...} -- assumption is
+		that each vertex is adjacent to the next.  Winding order (clockwise vs counterclockwise) is
+		irrelevant for every face EXCEPT THE FIRST.  The first face is assumed to wind clockwise.
 	edgeLength - length of each edge
 	filePath - can be absolute or relative, must be a string formatted so Mathematica can read it.
 		If relative, Mathematica will assume root is Documents directory (for Windows anyway)
@@ -65,7 +65,7 @@ need to have Mathematica installed on your computer.
 		netToShape[faces, adjacentFaces, duplicates, edgeLength, filePath, verbose]
 
 	Parameters:
-	faces - vertices which comprise each face {{1,2,3,4},...} -- assumption is that each vertex
+	faces - vertices which comprise each face in the net {{1,2,3,4},...} -- assumption is that each vertex
 		is adjacent to the next.  Winding order (clockwise vs counterclockwise) is irrelevant for
 		every face EXCEPT THE FIRST.  The first face is assumed to wind clockwise.
 	adjacentFaces - dual of input net, where each face is a vertex whose value is its position in
