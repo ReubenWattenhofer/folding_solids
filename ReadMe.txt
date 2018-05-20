@@ -81,13 +81,19 @@ need to have Mathematica installed on your computer.
 		x >= 1: every x folds 
 
 
-# Limitations/errata #
+# Limitations #
 
 1. This package was designed for convex polyhedra, i.e. the shape must have no dimples/craters in the surface.
 2. It should work perfectly for so-called Johnson solids, but "near-Johnson" solids will end up with
 	distorted, non-planar faces.  I.e, The result will be a concave shape.
-3. I don't think an icosahedron can be folded with the current algorithm, unless there's a way to create a 
-	net where no vertex has degree >= 5.
+3. This algorithm only seems to work for "near-Johnson" solids.  Shapes which require significantly distorted
+	faces will probably fail.  For an example, see the Herschel graph polyhedron:
+	http://aperiodical.com/wp-content/uploads/2013/09/herschel-enneahedron.png
+	(found on http://aperiodical.com/2013/10/an-enneahedron-for-herschel )
+4. If a polyhedron does not have a net which has no degree-5 vertices, then it can't be folded using the
+	current algorithm.  Here's the current list of polyhedra we found that seem to be unfoldable:
+	- Icosahedron
+	- Snub Disphenoid
 
 
 # Miscellaneous #
@@ -110,4 +116,33 @@ provides, to the best of my knowledge.  This is not a complete list of the funct
 
 Dr. Ed Aboufadel, from Grand Valley State University, for the project idea and providing mentorship
 throughout the project.
+
+
+
+# ------------------------------------------------------------- #
+#			    Bugs				#
+#								#
+# (These notes are for myself as much as the general audience)	#
+# ------------------------------------------------------------- #
+
+# 5/20/18 #
+Alignment:
+
+Sometimes the algorithm fails to align the first face with the xy plane.  If you're getting a lot of errors,
+	that's probably why.  Temp fix: Setting the alignFreq parameter to 0, disabling the alignment feature,
+	will prevent this.
+*Fix pending*
+
+
+Unfolding:
+
+	recursiveUnfold function:
+If a point on a face is changed, but that face is later only visited during a recursive unwind, then the face
+	may no longer share two vertices with its parent.  This is irrelevent if the changed point is not one 
+	of the two shared vertices, since the other points will be changed again.  Bug found with the Herschel
+	polyhedral graph.  Temp fix: use netToShape instead, or input the polyhedral face order differently.
+*fix pending*
+
+
+
 
