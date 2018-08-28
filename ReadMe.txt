@@ -6,6 +6,8 @@ things:
 	2. Saves an animation (.gif file) of the shape being created
 	3. Saves and returns an STL file of the shape, to do with as you please (they're fun to 3D print)
 
+For more background information on this project, check out this article: 
+http://chalkdustmagazine.com/blog/folding-nets-into-johnson-solids/
 
 
 # Dependencies #
